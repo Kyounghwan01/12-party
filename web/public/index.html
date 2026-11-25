@@ -1,0 +1,101 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="stylesheet" href="/style.css"><title>연말 파티 퀴즈</title></head><body><main id="app"></main><script src="/common.js"></script>
+<script>
+let me = null, s = null, shown = '', picked = null, sending = false, score = null;
+try { me = JSON.parse(localStorage.getItem('quiz-me')); } catch {}
+const keep = () => { try { me ? localStorage.setItem('quiz-me', JSON.stringify(me)) : localStorage.removeItem('quiz-me'); } catch {} };
+const app = $('app');
+
+function joinForm() {
+  let team = '';
+  app.innerHTML = `<form id="f" class="join"><h1 class="center">연말 파티 퀴즈</h1>
+    <div class="row pick"><button type="button" data-team="red" aria-pressed="false">레드팀</button><button type="button" data-team="green" aria-pressed="false">그린팀</button></div>
+    <label>이름<input id="name" maxlength="20" autocomplete="name" placeholder="이름을 입력하세요" required></label>
+    <p class="err" id="err"></p><button class="primary enter">게임입장</button></form>`;
+  app.querySelectorAll('[data-team]').forEach((b) => {
+    b.onclick = () => { team = b.dataset.team; $('err').textContent = ''; app.querySelectorAll('[data-team]').forEach((x) => x.setAttribute('aria-pressed', x === b)); };
+  });
+  $('f').onsubmit = async (e) => {
+    e.preventDefault();
+    if (!team) { $('err').textContent = '팀을 선택하세요.'; return; }
+    const btn = app.querySelector('.enter');
+    btn.disabled = true;
+    try { me = await api({ action: 'join', name: $('name').value, team }); keep(); shown = ''; await tick(); }
+    catch (err) { if ($('err')) $('err').textContent = err.message; btn.disabled = false; }
+  };
+}
+function lobby() {
+  const ask = s.survey.length && !me.surveyed;
+  app.innerHTML = `${head()}<div class="card center"><h2>입장 완료!</h2><p class="dim">화면을 켜 두고 시작을 기다려 주세요.</p></div>
+    ${ask ? `<form id="sv"><h2>기다리는 동안 골라 주세요</h2>${s.survey.map((x) => `<label>${esc(x.text)}<select data-i="${x.i}" required><option value="">선택</option>${x.choices.map((c, i) => `<option value="${i}">${esc(c)}</option>`).join('')}</select></label>`).join('')}<p class="err" id="err"></p><button class="primary">설문 제출</button></form>` : ''}`;
+  if (!ask) return;
+  $('sv').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('sv').querySelector('button');
+    btn.disabled = true;
+    const survey = {};
+    app.querySelectorAll('[data-i]').forEach((x) => { survey[x.dataset.i] = Number(x.value); });
+    try { await api({ action: 'survey', id: me.id, survey }); me.surveyed = true; keep(); if (s.phase === 'lobby') lobby(); }
+    catch (err) { if ($('err')) $('err').textContent = err.message; btn.disabled = false; }
+  };
+}
+const head = () => `<div class="dim"><b class="${me.team}">${teamName[me.team]}팀</b> ${esc(me.name)}${s.q >= 0 ? ` · ${s.q + 1}/${s.total}` : ''}</div>`;
+
+function render() {
+  if (s.phase === 'question') {
+    app.innerHTML = `${head()}<h2>${esc(s.question.text)}</h2><div class="bar"><i id="bar"></i></div><div class="choices">${s.question.choices.map((c, i) => `<button data-c="${i}" disabled>${esc(c)}</button>`).join('')}</div><p class="center dim" id="msg"></p>`;
+    app.querySelectorAll('[data-c]').forEach((b) => { b.onclick = () => send(Number(b.dataset.c)); });
+    paint();
+  } else if (s.phase === 'lobby') lobby();
+  else {
+    const ok = s.result.correct.includes(picked);
+    const reveal = s.phase === 'reveal';
+    app.innerHTML = `${head()}<div class="card center"><h2>${reveal ? (picked === null ? '답을 내지 못했어요' : ok ? '정답!' : '아쉬워요') : s.phase === 'end' ? '퀴즈 종료!' : '다음 문제를 기다려 주세요'}</h2>
+      ${reveal ? `<p>정답: ${s.result.correct.map((c) => esc(s.question.choices[c])).join(', ')}</p>` : ''}
+      <div class="dim">내 점수</div><div class="big">${score ?? '…'}</div></div>${reveal ? '' : teamsHtml(s.result)}`;
+  }
+}
+function paint() {
+  if (!s || !me || s.phase !== 'question' || !$('bar')) return;
+  const now = serverNow(), open = now >= s.openAt, closed = now > s.closeAt;
+  $('bar').style.width = `${open ? Math.max(0, (s.closeAt - now) / (s.closeAt - s.openAt)) * 100 : 100}%`;
+  app.querySelectorAll('[data-c]').forEach((b) => { b.disabled = !open || closed || picked !== null || sending; b.classList.toggle('on', Number(b.dataset.c) === picked); });
+  $('msg').textContent = sending ? '제출 중…' : picked !== null ? '제출했습니다!' : closed ? '시간이 끝났습니다.' : open ? `${Math.ceil((s.closeAt - now) / 1000)}초` : '문제를 읽어 주세요';
+}
+setInterval(paint, 200);
+
+async function send(c) {
+  if (picked !== null || sending) return;
+  const ms = serverNow() - s.openAt, q = s.q;
+  sending = true; paint();
+  for (let i = 0; i < 4; i++) {
+    try {
+      const r = await api({ action: 'answer', id: me.id, q, c, ms });
+      if (s.q === q) picked = r.saved ? c : (await api({ action: 'me', id: me.id })).answer;
+      break;
+    } catch (e) { if (e.status && e.status < 500) break; await new Promise((r) => setTimeout(r, 500)); }
+  }
+  sending = false; paint();
+}
+
+let busy = false;
+async function tick() {
+  if (busy) return;
+  busy = true;
+  try {
+    s = await api();
+    if (me && me.game !== s.id) { me = null; keep(); }
+    const k = me ? `${s.id}:${s.phase}:${s.q}` : `join:${s.id}`;
+    if (k === shown) return;
+    if (!me) { shown = k; return joinForm(); }
+    if (s.phase === 'question') picked = null;
+    if (s.q >= 0) {
+      // 새로고침이나 재접속 후에도 제출한 답과 점수를 되찾는다.
+      const mine = await api({ action: 'me', id: me.id });
+      picked = mine.answer; score = mine.score;
+    }
+    shown = k; render();
+  } catch (e) { if (!s) app.innerHTML = '<p class="center dim">연결 중입니다…</p>'; } finally { busy = false; }
+}
+poll(tick, 1800);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+</script></body></html>

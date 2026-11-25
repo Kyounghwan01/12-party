@@ -1,0 +1,30 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="stylesheet" href="/style.css"><title>퀴즈 화면</title><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script></head><body><main class="wide" id="app"></main><script src="/common.js"></script>
+<script>
+let s, shown = '';
+const app = $('app');
+function render() {
+  if (s.phase === 'lobby') {
+    app.innerHTML = `<h2>휴대폰으로 참가하세요!</h2><div id="qr"></div><h2>${esc(location.host)}</h2><p class="center big"><span id="n"></span>명 참가</p>`;
+    if (window.QRCode) new QRCode($('qr'), { text: location.origin, width: 300, height: 300 }); else $('qr').remove();
+  } else if (s.phase === 'question' || s.phase === 'reveal') {
+    const r = s.phase === 'reveal' ? s.result : null;
+    app.innerHTML = `<p class="center dim">${s.q + 1} / ${s.total}${s.question.poll ? ' · 다수의 선택을 맞혀라' : ''}</p><h2>${esc(s.question.text)}</h2><div class="bar"><i id="bar"></i></div>
+      <div class="choices">${s.question.choices.map((c, i) => `<div class="${r?.correct.includes(i) ? 'ok' : ''}">${esc(c)}${r ? ` · ${r.counts[i]}명` : ''}</div>`).join('')}</div>
+      <p class="center big" id="t"></p><p class="center dim"><span id="n"></span></p>`;
+  } else app.innerHTML = `<h2>${s.phase === 'end' ? finalText() : leader(s.result)}</h2>${teamsHtml(s.result)}<h2>${s.phase === 'end' && s.result.top[0] ? `오늘의 퀴즈왕: ${esc(s.result.top[0].name)}` : '개인 TOP 5'}</h2>${topHtml(s.result)}`;
+}
+function finalText() {
+  const d = s.result.teams.red.avg - s.result.teams.green.avg;
+  return d === 0 ? '동점입니다!' : `${d > 0 ? '레드' : '그린'}팀 승리!`;
+}
+function paint() {
+  if (!s) return;
+  if ($('n')) $('n').textContent = s.phase === 'lobby' ? s.joined : `${s.answered} / ${s.joined}명 제출`;
+  if (s.phase !== 'question' || !$('t')) return;
+  const now = serverNow(), open = now >= s.openAt;
+  $('bar').style.width = `${open ? Math.max(0, (s.closeAt - now) / (s.closeAt - s.openAt)) * 100 : 100}%`;
+  $('t').textContent = !open ? `시작 ${Math.ceil((s.openAt - now) / 1000)}` : now < s.closeAt ? Math.ceil((s.closeAt - now) / 1000) : '종료!';
+}
+setInterval(paint, 200);
+poll(async () => { s = await api(null, '?screen=1'); const k = `${s.id}:${s.phase}:${s.q}`; if (k !== shown) { shown = k; render(); } paint(); }, 1000);
+</script></body></html>

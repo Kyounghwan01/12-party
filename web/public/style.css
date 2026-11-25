@@ -1,0 +1,25 @@
+*{box-sizing:border-box}
+:root{--bg:#12151c;--card:#1e2430;--line:#343d4e;--fg:#f5f7fa;--dim:#a9b3c4;--red:#f0505a;--green:#2fb573;--gold:#ffc94a}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;word-break:keep-all}
+main{max-width:520px;margin:auto;padding:20px 16px 48px}
+h1{font-size:26px;margin:8px 0 16px}h2{font-size:22px;line-height:1.4}
+input,select,button,textarea{font:inherit;color:inherit;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:13px;width:100%}
+button{cursor:pointer;font-weight:700}button:disabled{opacity:.45;cursor:default}
+.primary{background:var(--gold);color:#1d1600;border:0}
+label{display:block;margin:14px 0;color:var(--dim)}label>*{margin-top:6px;color:var(--fg)}
+.choices{display:grid;gap:12px}.choices button,.choices div{padding:18px;text-align:left;border-radius:14px;background:var(--card);border:2px solid var(--line);font-weight:700}
+.choices .on{border-color:var(--gold)}.choices .ok{background:#17563a;border-color:var(--green)}
+.dim{color:var(--dim)}.err{color:#ff8a92;min-height:1.5em}.big{font-size:44px;font-weight:800}
+.red{color:var(--red)}.green{color:var(--green)}
+.bar{height:10px;background:var(--line);border-radius:9px;overflow:hidden;margin:14px 0}.bar i{display:block;height:100%;background:var(--gold);width:100%}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}
+.center{text-align:center}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.wide{max-width:1300px;padding:32px}.wide h2{font-size:clamp(26px,4vw,52px);text-align:center}
+.wide .choices{grid-template-columns:1fr 1fr;font-size:clamp(18px,2.4vw,32px)}
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:24px}.teams .card{text-align:center;font-size:24px}.teams .big{font-size:clamp(40px,7vw,96px)}
+.top{font-size:clamp(18px,2.2vw,30px);padding:0;list-style:none}.top li{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:10px}
+#qr{background:#fff;padding:16px;width:max-content;margin:20px auto;border-radius:12px}
+.wide{padding:12px 32px}.wide h2{margin:12px 0}.wide .teams .big{font-size:clamp(36px,9vh,90px);line-height:1.2}.wide .teams .card{margin:6px 0;padding:8px}.wide .top{margin:0;font-size:clamp(16px,3vh,30px)}.wide .top li{padding:6px 10px}
+.join{min-height:calc(100dvh - 68px);display:flex;flex-direction:column}.join .enter{margin-top:auto}
+.pick button{padding:30px 12px;font-size:22px;border:3px solid var(--line)}.pick [data-team=red]{color:var(--red)}.pick [data-team=green]{color:var(--green)}
+.pick [data-team=red][aria-pressed=true]{background:#b3232d;border-color:var(--red);color:#fff}.pick [data-team=green][aria-pressed=true]{background:#16703f;border-color:var(--green);color:#fff}

@@ -1,0 +1,62 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="stylesheet" href="/style.css"><title>퀴즈 관리자</title></head><body><main id="app"></main><script src="/common.js"></script>
+<script>
+let s = null, shown = '', busy = false;
+const app = $('app');
+const call = (action, extra = {}) => api({ action, ...extra });
+const showErr = (e) => { if ($('err')) $('err').textContent = e.message; };
+
+const labels = { lobby: '퀴즈 시작', question: '정답 공개', reveal: '순위 공개', board: '다음 문제', end: '종료됨' };
+function render() {
+  app.innerHTML = `<h1>퀴즈 관리자</h1><p><a class="green" href="/screen" target="_blank">대형 화면 열기</a></p>
+    <div class="card"><div>${s.phase === 'lobby' ? '대기 중' : `${s.q + 1} / ${s.total}번 문제`}</div><div id="info"></div>${s.question ? `<h2>${esc(s.question.text)}</h2>` : ''}</div>
+    <button class="primary" id="next">${s.phase === 'reveal' && s.q === s.total - 1 ? '최종 결과' : labels[s.phase]}</button><p class="err" id="err"></p>
+    ${s.result ? `<h2>${leader(s.result)}</h2>${teamsHtml(s.result)}<h2>개인 TOP 5</h2>${topHtml(s.result)}` : ''}
+    ${s.phase === 'lobby' ? editor() : ''}<hr><button id="reset">초기화 (참가자·점수 새로 시작)</button>`;
+  $('next').onclick = () => act('next', { from: `${s.phase}:${s.q}` });
+  $('reset').onclick = () => { if (confirm('참가자와 점수를 모두 초기화할까요?')) act('reset'); };
+  if (s.phase === 'lobby') {
+    $('save').onclick = saveConfig;
+    $('add').onclick = () => $('list').insertAdjacentHTML('beforeend', card({ text: '', choices: ['', '', '', ''], answer: 0 }));
+    $('list').onclick = (e) => { if (e.target.dataset.del) e.target.closest('.card').remove(); };
+  }
+  paint();
+}
+const card = (x) => `<div class="card"><label>문제<input class="text" value="${esc(x.text)}"></label>${[0, 1, 2, 3].map((i) => `<label>보기 ${i + 1}<input class="c" value="${esc(x.choices[i] ?? '')}"></label>`).join('')}
+  <label>정답<select class="a">${[0, 1, 2, 3].map((i) => `<option value="${i}" ${x.answer === i ? 'selected' : ''}>보기 ${i + 1}</option>`).join('')}<option value="" ${x.answer === null ? 'selected' : ''}>사전 설문의 다수 답</option></select></label><button data-del="1">문제 삭제</button></div>`;
+const editor = () => `<h2>팀 전체 참가자 수</h2><p class="dim">미접속자도 평균에 포함합니다. 비우면 접속자 수를 씁니다.</p><div class="row"><label>레드<input id="red" type="number" min="0" value="${s.sizes.red || ''}"></label><label>그린<input id="green" type="number" min="0" value="${s.sizes.green || ''}"></label></div>
+  <h2>문제</h2><p class="dim">참가자가 들어오기 전에 저장하세요.</p><div id="list">${s.questions.map(card).join('')}</div><button id="add">문제 추가</button><p></p><button class="primary" id="save">저장</button>`;
+function saveConfig() {
+  const questions = [...app.querySelectorAll('#list .card')].map((c) => ({
+    text: c.querySelector('.text').value, choices: [...c.querySelectorAll('.c')].map((x) => x.value),
+    answer: c.querySelector('.a').value === '' ? null : Number(c.querySelector('.a').value),
+  }));
+  // 빈 보기가 중간에 있으면 정답 번호가 밀리므로 막는다.
+  if (questions.some((x) => x.choices.some((v, i) => !v.trim() && x.choices.slice(i).some((y) => y.trim())))) return alert('보기는 1번부터 빈칸 없이 채워 주세요.');
+  act('config', { questions, sizes: { red: $('red').value, green: $('green').value } }, '저장했습니다.');
+}
+async function act(action, extra, done) {
+  if (busy) return;
+  busy = true; paint();
+  try { await call(action, extra); if (done) alert(done); shown = ''; }
+  catch (e) { action === 'config' ? alert(e.message) : showErr(e); }
+  busy = false;
+  await refresh(); paint();
+}
+function paint() {
+  if (!s || !$('info')) return;
+  const wait = s.phase === 'question' ? s.closeAt + 1600 - serverNow() : 0;
+  $('next').disabled = busy || wait > 0 || s.phase === 'end';
+  $('info').innerHTML = `접속 <b class="red">레드 ${s.joined.red}</b> · <b class="green">그린 ${s.joined.green}</b>${s.phase === 'question' ? ` · 제출 ${s.answered}${wait > 0 ? ` · ${Math.ceil(wait / 1000)}초` : ''}` : ''}`;
+}
+setInterval(paint, 200);
+async function refresh() {
+  try {
+    const next = await call('status');
+    s = next;
+    const k = `${s.id}:${s.phase}:${s.q}`;
+    if (k !== shown) { shown = k; render(); }
+    paint();
+  } catch (e) { s ? showErr(e) : app.textContent = e.message; }
+}
+poll(refresh, 1200);
+</script></body></html>
